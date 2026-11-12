@@ -31,9 +31,9 @@ motivation: [Make APEXlang Easy: Makefiles and Merge-Safe Imports](https://harte
 
 ## How it works
 
-A second branch, `apex-db`, only ever holds what the database looked like at the
-last sync. That is the common base Git needs for a real three-way merge: it can
-tell what _you_ changed locally from what _others_ changed in the Builder.
+The local `apex-db` branch records the last exported database state. Git uses
+that shared history to compare your local edits with changes made in App
+Builder and merge them into your working branch.
 
 ```
 main      ──A───B (your edits)────────M───────R
@@ -42,7 +42,7 @@ apex-db        A────────S (DB export)───────S' (DB
 ```
 
 `sync` runs these steps and stops at the first problem. Every step checks where
-it stands, so you can simply run it again.
+it stands, so you can run it again after fixing the reported problem.
 
 1. **Commit your pending changes** in the app dir (asks for a message; other
    files in the repo are left alone).
@@ -50,7 +50,7 @@ it stands, so you can simply run it again.
    DB snapshot, along with an ID- and timestamp-independent checksum of the app.
 3. **Merge `apex-db` into your branch.** Different parts changed: Git merges
    them. Same lines changed: you get normal merge conflicts; resolve, commit,
-   run `sync` again.
+   then run `sync` again. No import happens while conflicts are unresolved.
 4. **Validate** the merged result with `apex validate`.
 5. **Plan the import.** Only changed components on APEX 26.2+, otherwise the
    full app (see below). You confirm (or pass `-y`).
@@ -87,10 +87,14 @@ uc-apex-sync sync pages/p00010-orders.apx
 uc-apex-sync sync 'pages/p0001*' shared-components/lovs/
 ```
 
-Still exports and merges everything, but imports only your changes under these
-paths (relative to `APP_DIR`, Git globs). Everything else stays local and is
-imported by a later `sync`; `status` shows what is still pending. This needs a
-partial import, so deletions under these paths are refused.
+`sync` still exports and merges the whole app, but imports only changes that
+match the supplied paths. Paths are relative to `APP_DIR` and accept Git glob
+patterns; quote patterns so your shell does not expand them first.
+
+Other local changes remain pending until a later `sync`; `status` shows them.
+Selecting paths requires partial imports (APEX 26.2+ and SQLcl 26.3+). If the
+selection requires a full import, such as when a component was deleted, the
+command stops instead.
 
 ## Requirements
 
@@ -113,8 +117,14 @@ make -C ~/.local/share/uc-apex-sync install    # symlinks ~/.local/bin/uc-apex-s
 git -C ~/.local/share/uc-apex-sync pull
 ```
 
-`make install BIN_DIR=/usr/local/bin` puts the link somewhere else;
-`make uninstall` removes it.
+Make sure `~/.local/bin` is on your `PATH`. If it is missing, add
+`export PATH="$HOME/.local/bin:$PATH"` to your shell profile (for example,
+`~/.zshrc`), then open a new terminal.
+
+To use a different install directory, run
+`make -C ~/.local/share/uc-apex-sync install BIN_DIR=/usr/local/bin`.
+To remove the link, run `make -C ~/.local/share/uc-apex-sync uninstall`
+(with the same `BIN_DIR` if you changed it).
 
 **Fallback: copy it into the project.** If you can't install it on every
 machine (CI, a colleague without the clone), or want to pin a version for a
@@ -131,10 +141,18 @@ chmod +x scripts/uc-apex-sync.sh
 ## Project setup
 
 1. Copy [`examples/makefile`](examples/makefile) into your project and adjust
-   `APP_ID` and `APP_DIR`. Each developer copies
-   [`examples/.env.example`](examples/.env.example) to `.env` (untracked) and
-   sets their `DB_CONN`. The makefile is optional; the script only needs the
-   environment variables listed under [Configuration](#configuration).
+   `APP_ID`, `EXPORT_DIR`, and `APP_DIR`. The export creates a folder named
+   after the app alias in lower case: for alias `MY-APP` and
+   `EXPORT_DIR=./src/app`, use `APP_DIR=./src/app/my-app`. Set `SYNC_BRANCH`
+   if you work on a branch other than `main`.
+
+   Each developer copies [`examples/.env.example`](examples/.env.example) to
+   `.env` in the project root and sets `DB_CONN` to their SQLcl saved connection
+   name. Add `.env` to `.gitignore` to keep it out of Git.
+
+   The makefile is optional. To run `uc-apex-sync` directly, export the
+   [configuration variables](#configuration) in your shell first; the script
+   does not load `.env` itself. Run project commands from the repository root.
 
 2. Export the app once and commit it (skip if it is already in the repo):
 
@@ -153,7 +171,9 @@ chmod +x scripts/uc-apex-sync.sh
    If the DB has changed since, no commit matches; pass the commit of your
    last export explicitly: `make sync-init BASE=<commit>`.
 
-From then on, `make sync-app` (or `uc-apex-sync sync`) instead of an import.
+From then on, use `make sync-app` (or `uc-apex-sync sync`) to import changes.
+If Git reports merge conflicts, resolve them in your working branch, commit
+the resolution, and run the same command again.
 
 Every developer runs `init` once per clone. `apex-db` is a local branch; don't
 push it, since it describes the DB as _your_ clone last saw it.
@@ -169,9 +189,11 @@ push it, since it describes the DB as _your_ clone last saw it.
 
 ## Configuration
 
-Environment variables (the example makefile sets them from its variables and `.env`):
+The script reads these environment variables. The example makefile passes
+them from its settings and `.env`. `DB_CONN`, `APP_ID`, and `APP_DIR` are
+required for database commands; `status` only requires `APP_DIR`.
 
-| Variable         | Default    |                                                                         |
+| Variable         | Default    | Description                                                             |
 | ---------------- | ---------- | ----------------------------------------------------------------------- |
 | `DB_CONN`        |            | SQLcl saved connection name                                             |
 | `APP_ID`         |            | application id                                                          |
@@ -199,7 +221,7 @@ Environment variables (the example makefile sets them from its variables and `.e
 ## Tests
 
 ```sh
-make test              # ~45 tests, no database needed (uses test/fake-sql)
+make test              # no database needed (uses test/fake-sql)
 test/run.sh conflict   # only tests whose name contains "conflict"
 make lint              # shellcheck
 ```
