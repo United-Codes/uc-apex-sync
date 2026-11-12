@@ -1,6 +1,6 @@
 # Tests for uc-apex-sync.sh against the fake SQLcl. Run with test/run.sh.
 # Every function named test_* is a test; setup/teardown run around each.
-# shellcheck shell=bash disable=SC2329
+# shellcheck shell=bash disable=SC2329,SC2034  # OUT/RC are read by the asserts in lib.sh
 
 P1=pages/p00001-home.apx
 P2=pages/p00002-customers.apx
@@ -440,7 +440,7 @@ test_status_reports_uncommitted_changes() {
 test_help_and_version() {
   run --help
   assert_ok
-  assert_out "Usage: uc-apex-sync.sh"
+  assert_out "Usage: uc-apex-sync <command>"
   run --version
   assert_ok
   assert_out "uc-apex-sync "
@@ -448,9 +448,26 @@ test_help_and_version() {
 
 # --- example makefile -------------------------------------------------------
 
-test_example_makefile() {
+# Install the command like a user would: make install into a dir on the PATH.
+install_cmd() {
+  make -s -C "$TEST_DIR/.." install BIN_DIR="$WORK/bin" >/dev/null || fail "make install failed"
+  PATH="$WORK/bin:$PATH"
+  export PATH
+}
+
+test_install_symlinks_the_command() {
+  install_cmd
+  [ -L "$WORK/bin/uc-apex-sync" ] || fail "no symlink"
+  OUT=$(uc-apex-sync --version 2>&1) RC=$?
+  assert_ok
+  assert_out "uc-apex-sync "
+  make -s -C "$TEST_DIR/.." uninstall BIN_DIR="$WORK/bin"
+  [ ! -e "$WORK/bin/uc-apex-sync" ] || fail "uninstall left the symlink"
+}
+
+test_example_makefile_uses_installed_command() {
+  install_cmd
   cp "$TEST_DIR/../examples/makefile" makefile
-  export SYNC="$SCRIPT"
   OUT=$(make 2>&1) RC=$?
   assert_ok
   assert_out "sync-app"
@@ -461,6 +478,7 @@ test_example_makefile() {
   assert_out "uncommitted changes"
   OUT=$(make sync-app YES=1 MSG="via make" FILES=pages/p00001-home.apx </dev/null 2>&1) RC=$?
   assert_ok
+  assert_out "uc-apex-sync sync -y"
   assert_imports "import -files $P1"
   git log --format=%s | grep -q "via make" || fail "MSG not passed"
   : >"$FAKE_DB/log"
@@ -470,4 +488,23 @@ test_example_makefile() {
   OUT=$(make validate-app 2>&1) RC=$?
   assert_ok
   assert_out "Validation successful"
+}
+
+test_example_makefile_prefers_project_copy() {
+  install_cmd
+  cp "$TEST_DIR/../examples/makefile" makefile
+  mkdir -p scripts
+  cp "$SCRIPT" scripts/uc-apex-sync.sh
+  git add -A && git commit -q -m "pin uc-apex-sync"
+  OUT=$(make -n sync-status 2>&1) RC=$?
+  assert_ok
+  assert_out "./scripts/uc-apex-sync.sh status"
+  assert_not_out "$WORK/bin"
+}
+
+test_example_makefile_without_command() {
+  cp "$TEST_DIR/../examples/makefile" makefile
+  OUT=$(PATH=/usr/bin:/bin make sync-status 2>&1) RC=$?
+  assert_fails
+  assert_out "uc-apex-sync not found"
 }

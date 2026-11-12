@@ -10,7 +10,7 @@
 # holds what the database looked like at the last sync. It is the common base
 # Git needs for a real three-way merge.
 #
-# Usage: uc-apex-sync.sh <command> [options]
+# Usage: uc-apex-sync <command> [options]
 #
 #   init [<commit>]        Create DB_BRANCH. Without <commit>, export the app and
 #                          use the newest commit whose app dir matches the DB.
@@ -36,6 +36,9 @@
 #   APEX_WORKSPACE workspace name, if the connection can see several
 #   SQLCL          SQLcl executable                         (default: sql)
 #   MSG            same as -m
+#
+# Install once and upgrade with git pull:
+#   git clone https://github.com/United-Codes/uc-apex-sync && make -C uc-apex-sync install
 #
 # https://github.com/United-Codes/uc-apex-sync  (MIT License)
 
@@ -177,7 +180,7 @@ commit_worktree() {
 
 ensure_worktree() {
   branch_exists "$BRANCH" \
-    || die "branch $BRANCH missing; run 'uc-apex-sync.sh init' first (make sync-init)"
+    || die "branch $BRANCH missing; run 'uc-apex-sync init' first (make sync-init)"
   if [ ! -d "$WT" ]; then
     git worktree prune
     git worktree add -q "$WT" "$BRANCH"
@@ -351,7 +354,7 @@ cmd_init() {
   done
   WT=$tmp_wt
   [ -n "$match" ] || die "no commit on $(git rev-parse --abbrev-ref HEAD) matches the app in the DB.
-Pass the commit of your last export explicitly: uc-apex-sync.sh init <commit>
+Pass the commit of your last export explicitly: uc-apex-sync init <commit>
 (or export the app, commit it, and run init again)."
   git branch "$BRANCH" "$match"
   log "created $BRANCH at $(git log -1 --format='%h %s' "$match")"
@@ -373,7 +376,7 @@ cmd_pull() {
 }
 
 cmd_status() {
-  branch_exists "$BRANCH" || die "branch $BRANCH missing; run 'uc-apex-sync.sh init' first"
+  branch_exists "$BRANCH" || die "branch $BRANCH missing; run 'uc-apex-sync init' first"
   if [ -n "$(git status --porcelain -- "$APP_DIR")" ]; then
     log "uncommitted changes in $APP_DIR (sync commits them first):"
     git status --short -- "$APP_DIR"
@@ -532,7 +535,7 @@ main() {
     -h | --help | help) usage ;;
     -V | --version | version) echo "uc-apex-sync $VERSION" ;;
     "") usage >&2; exit 1 ;;
-    *) die "unknown command '$cmd'; see uc-apex-sync.sh --help" ;;
+    *) die "unknown command '$cmd'; see uc-apex-sync --help" ;;
   esac
 }
 

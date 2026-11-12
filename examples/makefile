@@ -1,10 +1,9 @@
 # Export, import and merge-safe sync of an APEX app in APEXlang format.
 #
-# Copy this makefile and uc-apex-sync.sh into your project:
-#
-#   makefile
-#   scripts/uc-apex-sync.sh
-#   src/app/<app-alias>/...      (created by make export-app)
+# Copy this makefile into your project. The sync-* targets need uc-apex-sync:
+#   - installed on the PATH (git clone ... && make install), or
+#   - copied into the project as scripts/uc-apex-sync.sh, which then wins, so
+#     a project can pin a version.
 #
 # The connection name differs per developer, so it lives in a local, untracked
 # .env file. Copy .env.example to .env and adjust.
@@ -22,10 +21,12 @@ APP_DIR     ?= $(EXPORT_DIR)/my-app
 # sync-*: the branch you import from, and the branch mirroring the DB.
 SYNC_BRANCH ?= main
 DB_BRANCH   ?= apex-db
-SYNC        ?= ./scripts/uc-apex-sync.sh
+# Project copy if there is one, else the installed command.
+SYNC        ?= $(or $(wildcard ./scripts/uc-apex-sync.sh),$(shell command -v uc-apex-sync 2>/dev/null))
 SQLCL       ?= sql
 
-SYNC_ENV = DB_CONN="$(DB_CONN)" APP_ID="$(APP_ID)" APP_DIR="$(APP_DIR)" \
+SYNC_ENV = $(if $(SYNC),,$(error uc-apex-sync not found. Install it (see https://github.com/United-Codes/uc-apex-sync) or copy it to scripts/uc-apex-sync.sh))\
+	DB_CONN="$(DB_CONN)" APP_ID="$(APP_ID)" APP_DIR="$(APP_DIR)" \
 	SYNC_BRANCH="$(SYNC_BRANCH)" DB_BRANCH="$(DB_BRANCH)" SQLCL="$(SQLCL)"
 
 .DEFAULT_GOAL := help

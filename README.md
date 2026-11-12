@@ -9,7 +9,7 @@ their changes with yours, and only then imports. On APEX 26.2+ it imports only
 the components you changed, so the rest of the app is not touched at all.
 
 ```
-$ ./uc-apex-sync.sh sync
+$ uc-apex-sync sync
 ==> committed local changes in src/app/my-app
 ==> exporting app 100 from dev
 ==> DB has changes since the last sync:
@@ -25,8 +25,8 @@ Import into dev? [y/N] y
 ==> done; apex-db matches the DB
 ```
 
-It is a single Bash script without dependencies beyond Git and SQLcl, meant to
-be copied into your project and called from a makefile. Background and
+It is a single Bash script without dependencies beyond Git and SQLcl. Install
+it once and call it from your projects' makefiles. Background and
 motivation: [Make APEXlang Easy: Makefiles and Merge-Safe Imports](https://hartenfeller.dev/blog/make-apexlang-easy).
 
 ## How it works
@@ -83,8 +83,8 @@ faster.
 ### Importing only some of your changes
 
 ```sh
-./uc-apex-sync.sh sync pages/p00010-orders.apx
-./uc-apex-sync.sh sync 'pages/p0001*' shared-components/lovs/
+uc-apex-sync sync pages/p00010-orders.apx
+uc-apex-sync sync 'pages/p0001*' shared-components/lovs/
 ```
 
 Still exports and merges everything, but imports only your changes under these
@@ -100,18 +100,41 @@ partial import, so deletions under these paths are refused.
 - A SQLcl saved connection (`sql -name <name>`) to the app's parsing schema or a
   user with access to the workspace
 
-## Setup
+## Install
 
-1. Copy `uc-apex-sync.sh` into your project, e.g. as `scripts/uc-apex-sync.sh`,
-   and make it executable. Optionally copy [`examples/makefile`](examples/makefile)
-   and [`examples/.env.example`](examples/.env.example).
+Clone the repo once and link the script onto your PATH. Upgrading is a
+`git pull`, for all your projects at once.
 
-   ```sh
-   mkdir -p scripts
-   curl -fsSL -o scripts/uc-apex-sync.sh \
-     https://raw.githubusercontent.com/United-Codes/uc-apex-sync/main/uc-apex-sync.sh
-   chmod +x scripts/uc-apex-sync.sh
-   ```
+```sh
+git clone https://github.com/United-Codes/uc-apex-sync.git ~/.local/share/uc-apex-sync
+make -C ~/.local/share/uc-apex-sync install    # symlinks ~/.local/bin/uc-apex-sync
+
+# upgrade
+git -C ~/.local/share/uc-apex-sync pull
+```
+
+`make install BIN_DIR=/usr/local/bin` puts the link somewhere else;
+`make uninstall` removes it.
+
+**Fallback: copy it into the project.** If you can't install it on every
+machine (CI, a colleague without the clone), or want to pin a version for a
+project, commit the script as `scripts/uc-apex-sync.sh`. The example makefile
+uses that copy when it exists and the installed command otherwise.
+
+```sh
+mkdir -p scripts
+curl -fsSL -o scripts/uc-apex-sync.sh \
+  https://raw.githubusercontent.com/United-Codes/uc-apex-sync/main/uc-apex-sync.sh
+chmod +x scripts/uc-apex-sync.sh
+```
+
+## Project setup
+
+1. Copy [`examples/makefile`](examples/makefile) into your project and adjust
+   `APP_ID` and `APP_DIR`. Each developer copies
+   [`examples/.env.example`](examples/.env.example) to `.env` (untracked) and
+   sets their `DB_CONN`. The makefile is optional; the script only needs the
+   environment variables listed under [Configuration](#configuration).
 
 2. Export the app once and commit it (skip if it is already in the repo):
 
@@ -122,7 +145,7 @@ partial import, so deletions under these paths are refused.
 3. Create the `apex-db` branch:
 
    ```sh
-   make sync-init            # or: scripts/uc-apex-sync.sh init
+   make sync-init            # or: uc-apex-sync init
    ```
 
    `init` exports the app and looks for the newest commit whose app dir is
@@ -130,7 +153,7 @@ partial import, so deletions under these paths are refused.
    If the DB has changed since, no commit matches; pass the commit of your
    last export explicitly: `make sync-init BASE=<commit>`.
 
-From then on, `make sync-app` (or `uc-apex-sync.sh sync`) instead of an import.
+From then on, `make sync-app` (or `uc-apex-sync sync`) instead of an import.
 
 Every developer runs `init` once per clone. `apex-db` is a local branch; don't
 push it, since it describes the DB as _your_ clone last saw it.
@@ -176,8 +199,9 @@ Environment variables (the example makefile sets them from its variables and `.e
 ## Tests
 
 ```sh
-test/run.sh            # ~40 tests, no database needed (uses test/fake-sql)
+make test              # ~45 tests, no database needed (uses test/fake-sql)
 test/run.sh conflict   # only tests whose name contains "conflict"
+make lint              # shellcheck
 ```
 
 `test/fake-sql` stands in for SQLcl and keeps the "database" in a directory. It
