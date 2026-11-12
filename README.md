@@ -109,7 +109,7 @@ partial import, so deletions under these paths are refused.
    ```sh
    mkdir -p scripts
    curl -fsSL -o scripts/uc-apex-sync.sh \
-     https://raw.githubusercontent.com/United-Codes/uc-apexlang-merge/main/uc-apex-sync.sh
+     https://raw.githubusercontent.com/United-Codes/uc-apex-sync/main/uc-apex-sync.sh
    chmod +x scripts/uc-apex-sync.sh
    ```
 

@@ -37,7 +37,7 @@
 #   SQLCL          SQLcl executable                         (default: sql)
 #   MSG            same as -m
 #
-# https://github.com/United-Codes/uc-apexlang-merge  (MIT License)
+# https://github.com/United-Codes/uc-apex-sync  (MIT License)
 
 set -euo pipefail
 
