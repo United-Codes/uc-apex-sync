@@ -445,3 +445,29 @@ test_help_and_version() {
   assert_ok
   assert_out "uc-apex-sync "
 }
+
+# --- example makefile -------------------------------------------------------
+
+test_example_makefile() {
+  cp "$TEST_DIR/../examples/makefile" makefile
+  export SYNC="$SCRIPT"
+  OUT=$(make 2>&1) RC=$?
+  assert_ok
+  assert_out "sync-app"
+  edit_local $P1 's/title: Home/title: Start/'
+  edit_local $P2 's/title: Customers/title: Clients/'
+  OUT=$(make sync-status FILES=pages/p00001-home.apx 2>&1) RC=$?
+  assert_ok
+  assert_out "uncommitted changes"
+  OUT=$(make sync-app YES=1 MSG="via make" FILES=pages/p00001-home.apx </dev/null 2>&1) RC=$?
+  assert_ok
+  assert_imports "import -files $P1"
+  git log --format=%s | grep -q "via make" || fail "MSG not passed"
+  : >"$FAKE_DB/log"
+  OUT=$(make sync-app YES=1 FULL=1 </dev/null 2>&1) RC=$?
+  assert_ok
+  assert_imports "import full"
+  OUT=$(make validate-app 2>&1) RC=$?
+  assert_ok
+  assert_out "Validation successful"
+}

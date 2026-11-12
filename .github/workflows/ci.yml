@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -x uc-apex-sync.sh test/*.sh test/fake-sql
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS ships bash 3.2, which the script has to keep working with.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: tests (fake SQLcl, no database)
+        run: test/run.sh
