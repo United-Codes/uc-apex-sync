@@ -10,7 +10,6 @@ fail() {
   printf '    FAIL: %b\n' "$*" >&2
   if [ -n "${OUT:-}" ]; then
     printf '    --- last output (rc=%s) ---\n' "${RC:-?}" >&2
-    # shellcheck disable=SC2001
     sed 's/^/    | /' <<<"$OUT" >&2
   fi
   exit 1

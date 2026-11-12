@@ -1,0 +1,2 @@
+# sed over a variable reads better than ${var//} for multi-line text
+disable=SC2001

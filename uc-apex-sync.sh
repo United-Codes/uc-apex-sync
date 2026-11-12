@@ -415,7 +415,6 @@ import_app() {
   local files=$1 out cmd rc=0
   cmd="apex import -input $APP_DIR$WS_OPT"
   if [ -n "$files" ]; then
-    # shellcheck disable=SC2001
     cmd+=" -files $(sed "s|^|$APP_DIR/|" <<<"$files" | tr '\n' ' ')"
   fi
   out=$(run_sql "$cmd") || true
