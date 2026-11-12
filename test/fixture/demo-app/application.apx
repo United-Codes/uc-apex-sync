@@ -1,0 +1,9 @@
+app DEMO-APP (
+    name: Demo App
+    version: 1.0.0
+    navigation {
+        homeUrl: {
+            page: 1
+        }
+    }
+)

@@ -1,0 +1,4 @@
+file "app.js" (
+    mimeType: text/javascript
+    charSet: utf-8
+)

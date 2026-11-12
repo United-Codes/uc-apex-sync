@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# Stand-in for SQLcl, used by the tests. The "database" is a directory:
+#
+#   $FAKE_DB/app/       the app as APEXlang files (what an export returns)
+#   $FAKE_DB/alias      folder name the export writes to       (default demo-app)
+#   $FAKE_DB/app_id     id of the app in the DB                (default 100)
+#   $FAKE_DB/version    APEX version                           (default 26.2.1)
+#   $FAKE_DB/calls      number of `sql -name` sessions so far
+#   $FAKE_DB/log        one line per apex command run against the DB
+#
+# It mimics what the real SQLcl 26.3 / APEX 26.2 does in the cases the script
+# cares about:
+#   - exits 0 even if a command fails; errors are only in the output
+#   - `-files` accepts only .apx files that exist, and rejects install scripts
+#     (APEXLangIllegalFileImportSet), importing nothing in that case
+#   - a partial import cannot delete components; a full import can
+#   - the export writes .apx files in canonical form: here, no trailing blanks
+#
+# Hooks for tests:
+#   FAKE_HOOK        shell code run at the start of each `sql -name` session,
+#                    with FAKE_CALL (session number) and FAKE_INPUT (the script)
+#   a line `COMPILE_ERROR` in an .apx file makes validate/import fail to compile
+#   a line `RUNTIME_ERROR` in an .apx file makes the import fail with an ORA- error
+
+set -euo pipefail
+
+DB=${FAKE_DB:?FAKE_DB not set}
+alias_name=$(cat "$DB/alias" 2>/dev/null || echo demo-app)
+app_id=$(cat "$DB/app_id" 2>/dev/null || echo 100)
+version=$(cat "$DB/version" 2>/dev/null || echo 26.2.1)
+
+mode=nolog
+while [ $# -gt 0 ]; do
+  case $1 in
+    -name) mode=db; shift 2 ;;
+    -nolog) mode=nolog; shift ;;
+    *) shift ;;
+  esac
+done
+
+input=$(cat)
+
+if [ $mode = db ]; then
+  FAKE_CALL=$(($(cat "$DB/calls" 2>/dev/null || echo 0) + 1))
+  echo "$FAKE_CALL" >"$DB/calls"
+  if [ -n "${FAKE_HOOK:-}" ]; then
+    FAKE_INPUT=$input
+    export FAKE_CALL FAKE_INPUT
+    eval "$FAKE_HOOK"
+  fi
+fi
+
+opt() { # opt <name> <words...>: value after -name
+  local name=$1
+  shift
+  while [ $# -gt 0 ]; do
+    if [ "$1" = "$name" ]; then echo "${2:-}"; return 0; fi
+    shift
+  done
+  return 1
+}
+
+tree_sum() {
+  (cd "$DB/app" && find . -type f | LC_ALL=C sort | while read -r f; do echo "$f"; cat "$f"; done) | cksum | tr ' ' '-'
+}
+
+compile_check() { # compile_check <dir>: print errors like APEX does, return 1 on errors
+  local hits
+  hits=$(grep -rl --include='*.apx' -e '^COMPILE_ERROR' "$1" 2>/dev/null || true)
+  [ -z "$hits" ] && return 0
+  echo "APEXlang Compile Errors:"
+  for f in $hits; do
+    echo "File: ${f#"$1"/}"
+    echo "Type: SYNTAX_ERROR"
+    echo "Error: Unexpected token COMPILE_ERROR"
+  done
+  return 1
+}
+
+do_export() {
+  local id dir types
+  id=$(opt -applicationid "$@")
+  dir=$(opt -dir "$@")
+  types=$(opt -exptype "$@")
+  echo "export $types" >>"$DB/log"
+  if [ "$id" != "$app_id" ]; then
+    echo "ORA-20987: APEX - Application $id not found"
+    return
+  fi
+  mkdir -p "$dir"
+  case ",$types," in *,CHECKSUM-SH256,*)
+    if [ "$types" = CHECKSUM-SH256 ]; then
+      echo "SH256:$(tree_sum)" >"$dir/f$id-sh256.sql"
+    else
+      mkdir -p "$dir/$alias_name"
+      echo "SH256:$(tree_sum)" >"$dir/$alias_name/f$id-sh256.sql"
+    fi
+    ;;
+  esac
+  case ",$types," in *,APEXLANG,*)
+    echo "Exporting Workspace DEMO - application $id"
+    mkdir -p "$dir/$alias_name"
+    (cd "$DB/app" && find . -type f) | while read -r f; do
+      mkdir -p "$(dirname "$dir/$alias_name/$f")"
+      case $f in
+        *.apx) sed 's/[[:space:]]*$//' "$DB/app/$f" >"$dir/$alias_name/$f" ;;
+        *) cp "$DB/app/$f" "$dir/$alias_name/$f" ;;
+      esac
+    done
+    echo "File $dir/$alias_name/application.apx created"
+    ;;
+  esac
+}
+
+# Copy one component file (and the non-.apx files it owns) into the DB.
+import_component() {
+  local in=$1 rel=$2 dir base f
+  mkdir -p "$(dirname "$DB/app/$rel")"
+  cp "$in/$rel" "$DB/app/$rel"
+  # shared-components/static-files.apx owns shared-components/static-files/
+  if [ -d "$in/${rel%.apx}" ]; then
+    rm -rf "${DB:?}/app/${rel%.apx}"
+    cp -R "$in/${rel%.apx}" "$DB/app/${rel%.apx}"
+  fi
+  # supporting-objects/supporting-objects.apx owns files it names in its dir
+  dir=$(dirname "$rel")
+  for f in "$in/$dir"/*; do
+    [ -f "$f" ] || continue
+    base=$(basename "$f")
+    case $base in *.apx) continue ;; esac
+    if grep -qF "$base" "$in/$rel"; then cp "$f" "$DB/app/$dir/$base"; fi
+  done
+}
+
+do_import() {
+  local in files=() f rel w seen=0
+  in=$(opt -input "$@")
+  for w in "$@"; do
+    if [ $seen -eq 1 ]; then
+      case $w in -*) seen=0 ;; *) files+=("$w"); continue ;; esac
+    fi
+    [ "$w" = -files ] && seen=1
+  done
+  echo "Importing application ID: $app_id into workspace: DEMO"
+  compile_check "$in" || return 0
+  if [ ${#files[@]} -gt 0 ]; then
+    for f in "${files[@]}"; do
+      if [ ! -f "$f" ]; then
+        printf 'The provided FILES option contains non-existent files:\n%s\n' "${f#"$in"/}"
+        return 0
+      fi
+      case $f in
+        *.apx) ;;
+        *)
+          echo "APEXlang Import Errors:"
+          echo "Error: oracle.apexlang.core.APEXLangIllegalFileImportSet: importFileSet contains a file without a transpileable component: ${f#"$in"/}"
+          return 0
+          ;;
+      esac
+      if grep -q '^installScript' "$f"; then
+        echo "APEXlang Import Errors:"
+        echo "Error: oracle.apexlang.core.APEXLangIllegalFileImportSet: Component Type Unsupported: installScript"
+        return 0
+      fi
+    done
+  fi
+  if grep -rq --include='*.apx' '^RUNTIME_ERROR' "$in"; then
+    echo "APEXlang Import Errors:"
+    echo "Error: ORA-20001: call=wwv_flow_imp_page.create_page, sqlerrm=ORA-00001: unique constraint violated"
+    return 0
+  fi
+  if [ ${#files[@]} -gt 0 ]; then
+    echo "import -files ${files[*]#"$in"/}" >>"$DB/log"
+    for f in "${files[@]}"; do
+      rel=${f#"$in"/}
+      import_component "$in" "$rel"
+    done
+  else
+    echo "import full" >>"$DB/log"
+    rm -rf "${DB:?}/app"
+    mkdir -p "$DB/app"
+    (cd "$in" && tar cf - --exclude ./apex-exports .) | (cd "$DB/app" && tar xf -)
+  fi
+  echo "Import successful."
+}
+
+do_validate() {
+  local in
+  in=$(opt -input "$@")
+  if compile_check "$in"; then
+    echo "Validation successful."
+  fi
+}
+
+while IFS= read -r line; do
+  # shellcheck disable=SC2086
+  set -- $line
+  case "${1:-}" in
+    select)
+      case $line in *apex_release*) echo "APEX_VERSION=$version" ;; esac
+      ;;
+    apex)
+      shift
+      cmd=$1
+      shift
+      case $cmd in
+        export) do_export "$@" ;;
+        import) do_import "$@" ;;
+        validate) do_validate "$@" ;;
+        *) echo "Unknown apex command $cmd" ;;
+      esac
+      ;;
+    exit) break ;;
+  esac
+done <<<"$input"
+exit 0

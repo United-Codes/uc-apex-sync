@@ -1,0 +1,44 @@
+page 2 (
+    name: Customers
+    alias: CUSTOMERS
+    title: Customers
+    appearance {
+        pageTemplate: @/standard
+    }
+
+    region intro (
+        name: Intro
+        type: staticContent
+        layout {
+            sequence: 10
+            slot: body
+        }
+        source {
+            htmlCode: Welcome to Customers
+        }
+    )
+
+    region report (
+        name: Report
+        type: classicReport
+        layout {
+            sequence: 20
+            slot: body
+        }
+        source {
+            sqlQuery: select * from customers
+        }
+    )
+
+    region footer (
+        name: Footer
+        type: staticContent
+        layout {
+            sequence: 30
+            slot: body
+        }
+        source {
+            htmlCode: Customers footer
+        }
+    )
+)

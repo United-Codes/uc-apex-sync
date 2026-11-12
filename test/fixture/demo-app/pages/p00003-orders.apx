@@ -1,0 +1,44 @@
+page 3 (
+    name: Orders
+    alias: ORDERS
+    title: Orders
+    appearance {
+        pageTemplate: @/standard
+    }
+
+    region intro (
+        name: Intro
+        type: staticContent
+        layout {
+            sequence: 10
+            slot: body
+        }
+        source {
+            htmlCode: Welcome to Orders
+        }
+    )
+
+    region report (
+        name: Report
+        type: classicReport
+        layout {
+            sequence: 20
+            slot: body
+        }
+        source {
+            sqlQuery: select * from orders
+        }
+    )
+
+    region footer (
+        name: Footer
+        type: staticContent
+        layout {
+            sequence: 30
+            slot: body
+        }
+        source {
+            htmlCode: Orders footer
+        }
+    )
+)

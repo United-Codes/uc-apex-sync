@@ -1,0 +1,18 @@
+lov status (
+    name: STATUS
+    source {
+        location: staticValues
+    }
+
+    entry open (
+        sequence: 1
+        display: Open
+        return: OPEN
+    )
+
+    entry closed (
+        sequence: 2
+        display: Closed
+        return: CLOSED
+    )
+)
