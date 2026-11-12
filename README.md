@@ -41,6 +41,28 @@ main      ──A───B (your edits)────────M─────
 apex-db        A────────S (DB export)───────S' (DB after import)
 ```
 
+A colleague edits page 3 in App Builder while you edit page 1 in your repo.
+`sync` keeps both changes:
+
+```mermaid
+sequenceDiagram
+    participant C as Colleague (App Builder)
+    participant DB as Dev database
+    participant D as apex-db branch
+    participant M as Your branch (main)
+
+    C->>DB: edits page 3
+    Note over M: you edit page 1, run sync<br/>1. commit pending changes
+    DB->>D: 2. export app, commit snapshot + checksum
+    D->>M: 3. git merge (page 3 + page 1)
+    Note over M: 4. apex validate<br/>5. plan: only p00001-home.apx
+    M->>DB: 6. checksum unchanged since export?
+    DB-->>M: yes
+    M->>DB: 7. import p00001-home.apx only
+    DB->>D: 8. export again, commit as new apex-db
+    D->>M: merge normalized formatting back
+```
+
 `sync` runs these steps and stops at the first problem. Every step checks where
 it stands, so you can run it again after fixing the reported problem.
 
