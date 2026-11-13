@@ -160,6 +160,20 @@ curl -fsSL -o scripts/uc-apex-sync.sh \
 chmod +x scripts/uc-apex-sync.sh
 ```
 
+## Agent skill
+
+The repo includes a skill that teaches coding agents (Claude Code, Cursor,
+Codex, and others) how to use `uc-apex-sync`: check the setup, preview with
+`status`, run `sync`, resolve conflicts, and not skip the confirmation prompt.
+Install it with [`skills`](https://github.com/vercel-labs/skills):
+
+```sh
+npx skills add United-Codes/uc-apex-sync
+```
+
+Add `-g` to install it for all projects instead of the current one. The skill
+only gives the agent instructions; you still need to install the script above.
+
 ## Project setup
 
 1. Copy [`examples/makefile`](examples/makefile) into your project and adjust
