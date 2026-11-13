@@ -27,7 +27,7 @@ Import into dev? [y/N] y
 
 It is a single Bash script without dependencies beyond Git and SQLcl. Install
 it once and call it from your projects' makefiles. Background and
-motivation: [Make APEXlang Easy: Makefiles and Merge-Safe Imports](https://hartenfeller.dev/blog/make-apexlang-easy).
+motivation: [Make APEXlang Easy: Makefiles and Merge-Safe Imports](https://hartenfeller.dev/blog/makefiles-for-apex-projects).
 
 ## How it works
 
